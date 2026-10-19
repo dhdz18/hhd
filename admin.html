@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Điều Hành Kỳ Thi & Ngân Hàng Câu Hỏi (Gemini AI)</title>
+  <!-- Tailwind CSS & FontAwesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- PeerJS kết nối P2P & QRCode generator -->
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans pb-12">
+
+  <!-- Header -->
+  <header class="bg-slate-800 border-b border-slate-700 sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 bg-indigo-600/30 text-indigo-400 rounded-xl flex items-center justify-center border border-indigo-500/30">
+          <i class="fa-solid fa-user-shield text-xl"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg text-white">Bảng Điều Hành Admin</h1>
+          <p class="text-xs text-slate-400">Quản lý đề thi & Đồng bộ thi Realtime</p>
+        </div>
+      </div>
+
+      <!-- Khối Mã Phòng Thi -->
+      <div class="flex items-center space-x-3 bg-slate-900 px-4 py-2 rounded-xl border border-slate-700">
+        <div class="text-right">
+          <div class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Mã Phòng Thi</div>
+          <div id="room-id-display" class="font-mono text-lg font-extrabold text-indigo-400">Đang tạo...</div>
+        </div>
+        <button onclick="showQRModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-lg text-xs transition" title="Hiển thị mã QR">
+          <i class="fa-solid fa-qrcode text-base"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- Cột trái: Bảng điều khiển & Thí sinh -->
+    <div class="space-y-6">
+      
+      <!-- Card Bắt đầu kỳ thi -->
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
+        <h2 class="text-base font-bold text-white mb-3 flex items-center space-x-2">
+          <i class="fa-solid fa-play text-indigo-400"></i>
+          <span>Điều Khiển Kỳ Thi</span>
+        </h2>
+        <p class="text-xs text-slate-400 mb-4">Nhấn nút bên dưới để đồng loạt chuyển màn hình thí sinh sang làm bài thi.</p>
+        
+        <button id="btn-start" onclick="broadcastStart()" disabled class="w-full bg-slate-700 text-slate-400 cursor-not-allowed font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center space-x-2">
+          <i class="fa-solid fa-bolt"></i>
+          <span>Bắt Đầu Làm Bài Ngay</span>
+        </button>
+      </div>
+
+      <!-- Card Danh sách Thí sinh đã tham gia -->
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-base font-bold text-white flex items-center space-x-2">
+            <i class="fa-solid fa-users text-indigo-400"></i>
+            <span>Thí Sinh Đã Kết Nối</span>
+          </h2>
+          <span id="connected-count" class="bg-indigo-500/20 text-indigo-300 text-xs px-2.5 py-1 rounded-full font-bold border border-indigo-500/30">0 người</span>
+        </div>
+
+        <div id="connected-list" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+          <div class="text-center text-xs text-slate-500 py-6">Chưa có thí sinh nào nhập mã room.</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Cột Phải: Bảng Xếp Hạng & Ngân Hàng Câu Hỏi -->
+    <div class="lg:col-span-2 space-y-6">
+
+      <!-- Bảng Xếp Hạng Trực Tiếp -->
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
+        <h2 class="text-base font-bold text-white mb-4 flex items-center space-x-2">
+          <i class="fa-solid fa-trophy text-amber-400"></i>
+          <span>Bảng Xếp Hạng Trực Tiếp (Ai nộp đầu tiên đứng đầu)</span>
+        </h2>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-slate-900 text-xs text-slate-400 uppercase tracking-wider">
+              <tr>
+                <th class="p-3 rounded-l-xl">Hạng</th>
+                <th class="p-3">Thí sinh</th>
+                <th class="p-3 text-center">Điểm số</th>
+                <th class="p-3 text-center">Thời gian làm</th>
+                <th class="p-3 rounded-r-xl text-right">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-body" class="divide-y divide-slate-700/50">
+              <tr>
+                <td colspan="5" class="text-center text-xs text-slate-500 py-8">Chưa có dữ liệu bài nộp.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Quản Lý Ngân Hàng Câu Hỏi -->
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-base font-bold text-white flex items-center space-x-2">
+            <i class="fa-solid fa-file-pen text-indigo-400"></i>
+            <span>Ngân Hàng Câu Hỏi (<span id="question-count">0</span>)</span>
+          </h2>
+          <div class="flex space-x-2">
+            <button onclick="openGeminiModal()" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold px-3 py-2 rounded-xl transition flex items-center space-x-1.5 shadow-lg">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span>Tạo Đề Bằng AI</span>
+            </button>
+            <button onclick="openQuestionModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-2 rounded-xl transition flex items-center space-x-1.5">
+              <i class="fa-solid fa-plus"></i>
+              <span>Thêm Thủ Công</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="questions-list" class="space-y-3 max-h-96 overflow-y-auto pr-1"></div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Modal Tạo Đề Bằng Gemini AI -->
+  <div id="gemini-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-xl w-full shadow-2xl relative">
+      <h3 class="font-bold text-lg text-white mb-1 flex items-center space-x-2">
+        <i class="fa-solid fa-wand-magic-sparkles text-purple-400"></i>
+        <span>Tự động tạo câu hỏi bằng Gemini AI</span>
+      </h3>
+      <p class="text-xs text-slate-400 mb-4">Dán nội dung tài liệu, đoạn văn đề thi hoặc tải ảnh đề bài lên. AI sẽ tự động đọc và trích xuất câu hỏi.</p>
+
+      <div class="space-y-4 text-sm">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Gemini API Key (Lưu tự động trên trình duyệt)</label>
+          <input type="password" id="gemini-api-key" placeholder="Nhập API Key của bạn (AIzaSy...)" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Nội dung đề thi hoặc Yêu cầu:</label>
+          <textarea id="ai-prompt-text" rows="5" placeholder="Ví dụ: Tạo hộ tôi 5 câu hỏi trắc nghiệm về lịch sử Việt Nam hoặc dán nội dung bài học vào đây..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none font-mono"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Hoặc tải lên ảnh đề thi / tài liệu:</label>
+          <input type="file" id="ai-file-input" accept="image/*" class="text-xs text-slate-300">
+        </div>
+
+        <div id="ai-loading" class="hidden text-center text-xs text-purple-400 font-semibold animate-pulse py-2">
+          <i class="fa-solid fa-spinner fa-spin mr-1"></i> Gemini đang phân tích và soạn câu hỏi...
+        </div>
+      </div>
+
+      <div class="flex justify-end space-x-2 mt-6">
+        <button onclick="closeGeminiModal()" class="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold">Hủy</button>
+        <button onclick="generateQuestionsWithAI()" class="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center space-x-1">
+          <i class="fa-solid fa-bolt"></i>
+          <span>Tiến Hành Tạo Đề</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Mã QR Kết Nối -->
+  <div id="qr-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl relative">
+      <button onclick="closeQRModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      <h3 class="font-bold text-lg text-white mb-1">Mã QR Quét Tham Gia</h3>
+      <p class="text-xs text-slate-400 mb-4">Thí sinh dùng điện thoại quét mã bên dưới để vào ngay phòng thi</p>
+      
+      <div id="qrcode" class="flex justify-center p-4 bg-white rounded-xl mx-auto mb-4 w-fit"></div>
+      <div class="text-xs text-slate-300 font-mono bg-slate-900 py-2 px-3 rounded-lg border border-slate-700" id="qr-link-text"></div>
+    </div>
+  </div>
+
+  <!-- Modal Thêm/Sửa Câu Hỏi Thủ Công -->
+  <div id="q-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-lg w-full shadow-2xl">
+      <h3 id="modal-title" class="font-bold text-lg text-white mb-4">Thêm Câu Hỏi Mới</h3>
+      
+      <div class="space-y-3 text-sm">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Nội dung câu hỏi</label>
+          <input type="text" id="q-title" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Đáp án A</label>
+            <input type="text" id="opt-0" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Đáp án B</label>
+            <input type="text" id="opt-1" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Đáp án C</label>
+            <input type="text" id="opt-2" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Đáp án D</label>
+            <input type="text" id="opt-3" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Đáp án đúng</label>
+          <select id="q-correct" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white">
+            <option value="0">Đáp án A</option>
+            <option value="1">Đáp án B</option>
+            <option value="2">Đáp án C</option>
+            <option value="3">Đáp án D</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex justify-end space-x-2 mt-6">
+        <button onclick="closeQuestionModal()" class="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold">Hủy</button>
+        <button onclick="saveQuestion()" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">Lưu Câu Hỏi</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let peer = null;
+    let roomID = '';
+    let connectedClients = {};
+    let connectedNames = {};
+    let submissions = [];
+    let editingIndex = -1;
+
+    let questions = JSON.parse(localStorage.getItem('quiz_questions')) || [
+      {
+        title: "Thủ đô của Việt Nam là gì?",
+        options: ["Hà Nội", "TP. Hồ Chí Minh", "Đà Nẵng", "Cần Thơ"],
+        correct: 0
+      }
+    ];
+
+    window.addEventListener('load', () => {
+      initAdminRoom();
+      renderQuestions();
+      const savedKey = localStorage.getItem('gemini_api_key');
+      if (savedKey) document.getElementById('gemini-api-key').value = savedKey;
+    });
+
+    function initAdminRoom() {
+      roomID = 'ROOM-' + Math.floor(1000 + Math.random() * 9000);
+      document.getElementById('room-id-display').innerText = roomID;
+      peer = new Peer(roomID);
+
+      peer.on('connection', (conn) => {
+        conn.on('data', (data) => {
+          if (data.type === 'JOIN') {
+            connectedClients[conn.peer] = conn;
+            connectedNames[conn.peer] = data.name;
+            updateConnectedUI();
+          } else if (data.type === 'SUBMIT') {
+            handleSubmission(data);
+          }
+        });
+
+        conn.on('close', () => {
+          delete connectedClients[conn.peer];
+          delete connectedNames[conn.peer];
+          updateConnectedUI();
+        });
+      });
+    }
+
+    function updateConnectedUI() {
+      const list = document.getElementById('connected-list');
+      const count = Object.keys(connectedClients).length;
+      document.getElementById('connected-count').innerText = `${count} người`;
+
+      const btnStart = document.getElementById('btn-start');
+      if (count > 0) {
+        btnStart.disabled = false;
+        btnStart.className = "w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center space-x-2";
+      } else {
+        btnStart.disabled = true;
+        btnStart.className = "w-full bg-slate-700 text-slate-400 cursor-not-allowed font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center space-x-2";
+      }
+
+      if (count === 0) {
+        list.innerHTML = `<div class="text-center text-xs text-slate-500 py-6">Chưa có thí sinh nào nhập mã room.</div>`;
+        return;
+      }
+
+      list.innerHTML = '';
+      Object.values(connectedNames).forEach(name => {
+        const item = document.createElement('div');
+        item.className = 'bg-slate-900/60 border border-slate-700/60 px-3 py-2 rounded-xl text-xs flex items-center justify-between';
+        item.innerHTML = `<span class="font-medium text-slate-200">${name}</span><span class="inline-block w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>`;
+        list.appendChild(item);
+      });
+    }
+
+    function broadcastStart() {
+      if (questions.length === 0) {
+        alert('Vui lòng thêm ít nhất 1 câu hỏi trước khi bắt đầu!');
+        return;
+      }
+      const payload = { type: 'START_QUIZ', questions: questions };
+      Object.values(connectedClients).forEach(conn => {
+        if (conn.open) conn.send(payload);
+      });
+      alert('Đã phát lệnh bắt đầu làm bài tới tất cả thí sinh!');
+    }
+
+    function handleSubmission(data) {
+      const existingIdx = submissions.findIndex(s => s.name === data.name);
+      if (existingIdx !== -1) submissions[existingIdx] = data;
+      else submissions.push(data);
+
+      submissions.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return new Date(a.submittedAt) - new Date(b.submittedAt);
+      });
+      renderLeaderboard();
+    }
+
+    function renderLeaderboard() {
+      const tbody = document.getElementById('leaderboard-body');
+      tbody.innerHTML = '';
+      if (submissions.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-xs text-slate-500 py-8">Chưa có dữ liệu bài nộp.</td></tr>`;
+        return;
+      }
+      submissions.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-700/30 transition';
+        let rankBadge = `<span class="font-bold text-slate-400">#${index + 1}</span>`;
+        if (index === 0) rankBadge = `<span class="w-6 h-6 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full inline-flex items-center justify-center text-xs font-bold">1</span>`;
+        
+        tr.innerHTML = `
+          <td class="p-3">${rankBadge}</td>
+          <td class="p-3 font-semibold text-white">${item.name}</td>
+          <td class="p-3 text-center font-bold text-indigo-400">${item.score}/${item.total}</td>
+          <td class="p-3 text-center text-xs text-slate-300">${item.timeSpent}s</td>
+          <td class="p-3 text-right">
+            ${item.reason === 'Cheat' ? '<span class="bg-red-500/20 text-red-400 px-2 py-0.5 rounded text-[10px] font-bold">Vi phạm</span>' : '<span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-[10px] font-bold">Hợp lệ</span>'}
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    /* --- GEMINI AI INTEGRATION --- */
+    function openGeminiModal() {
+      document.getElementById('gemini-modal').classList.remove('hidden');
+    }
+    function closeGeminiModal() {
+      document.getElementById('gemini-modal').classList.add('hidden');
+    }
+
+    async function generateQuestionsWithAI() {
+      const apiKey = document.getElementById('gemini-api-key').value.trim();
+      const promptText = document.getElementById('ai-prompt-text').value.trim();
+      const fileInput = document.getElementById('ai-file-input');
+
+      if (!apiKey) {
+        alert('Vui lòng nhập Gemini API Key!');
+        return;
+      }
+      localStorage.setItem('gemini_api_key', apiKey);
+
+      if (!promptText && fileInput.files.length === 0) {
+        alert('Vui lòng nhập yêu cầu hoặc tải lên ảnh đề thi!');
+        return;
+      }
+
+      document.getElementById('ai-loading').classList.remove('hidden');
+
+      try {
+        let contents = [];
+        let systemInstruction = "Bạn là trợ lý giáo dục chuyên trắc nghiệm. Hãy đọc nội dung hoặc hình ảnh được cung cấp và trích xuất/tạo ra danh sách các câu hỏi trắc nghiệm. BẮT BUỘC trả về kết quả dưới dạng JSON array chuẩn thuần túy, KHÔNG có markdown ```json, có cấu trúc: [{\"title\": \"...\", \"options\": [\"A\", \"B\", \"C\", \"D\"], \"correct\": 0}] trong đó correct là số nguyên từ 0 đến 3 tương ứng vị trí đáp án đúng.";
+
+        let userMsg = promptText || "Hãy tạo câu hỏi trắc nghiệm dựa trên nội dung tài liệu này.";
+
+        if (fileInput.files.length > 0) {
+          const file = fileInput.files[0];
+          const base64Data = await toBase64(file);
+          contents.push({
+            inlineData: {
+              mimeType: file.type,
+              data: base64Data.split(',')[1]
+            }
+          });
+        }
+        contents.push({ text: userMsg });
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemInstruction }] },
+            contents: [{ parts: contents }],
+            generationConfig: { responseMimeType: "application/json" }
+          })
+        });
+
+        const data = await response.json();
+        if (data.error) throw new Error(data.error.message);
+
+        const aiResponseText = data.candidates[0].content.parts[0].text;
+        const newQuestions = JSON.parse(aiResponseText);
+
+        if (Array.isArray(newQuestions) && newQuestions.length > 0) {
+          questions = questions.concat(newQuestions);
+          renderQuestions();
+          closeGeminiModal();
+          alert(`AI đã tạo thành công ${newQuestions.length} câu hỏi mới!`);
+        } else {
+          throw new Error('AI không trả về danh sách hợp lệ.');
+        }
+
+      } catch (err) {
+        alert('Lỗi gọi Gemini AI: ' + err.message);
+      } finally {
+        document.getElementById('ai-loading').classList.add('hidden');
+      }
+    }
+
+    function toBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+      });
+    }
+
+    /* --- QUẢN LÝ CÂU HỎI THỦ CÔNG --- */
+    function renderQuestions() {
+      localStorage.setItem('quiz_questions', JSON.stringify(questions));
+      document.getElementById('question-count').innerText = questions.length;
+      const container = document.getElementById('questions-list');
+      container.innerHTML = '';
+
+      questions.forEach((q, idx) => {
+        const item = document.createElement('div');
+        item.className = 'bg-slate-900/60 border border-slate-700/60 p-4 rounded-xl flex justify-between items-start';
+        item.innerHTML = `
+          <div>
+            <div class="font-medium text-slate-200 text-sm mb-1">${idx + 1}. ${q.title}</div>
+            <div class="text-xs text-slate-400">Đáp án đúng: <span class="text-emerald-400 font-semibold">${q.options[q.correct]}</span></div>
+          </div>
+          <div class="flex space-x-2">
+            <button onclick="editQuestion(${idx})" class="text-slate-400 hover:text-indigo-400 text-xs p-1"><i class="fa-solid fa-pen"></i></button>
+            <button onclick="deleteQuestion(${idx})" class="text-slate-400 hover:text-red-400 text-xs p-1"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    function openQuestionModal() {
+      editingIndex = -1;
+      document.getElementById('modal-title').innerText = 'Thêm Câu Hỏi Mới';
+      document.getElementById('q-title').value = '';
+      document.getElementById('opt-0').value = '';
+      document.getElementById('opt-1').value = '';
+      document.getElementById('opt-2').value = '';
+      document.getElementById('opt-3').value = '';
+      document.getElementById('q-correct').value = '0';
+      document.getElementById('q-modal').classList.remove('hidden');
+    }
+
+    function closeQuestionModal() {
+      document.getElementById('q-modal').classList.add('hidden');
+    }
+
+    function saveQuestion() {
+      const title = document.getElementById('q-title').value.trim();
+      const opt0 = document.getElementById('opt-0').value.trim();
+      const opt1 = document.getElementById('opt-1').value.trim();
+      const opt2 = document.getElementById('opt-2').value.trim();
+      const opt3 = document.getElementById('opt-3').value.trim();
+      const correct = parseInt(document.getElementById('q-correct').value);
+
+      if (!title || !opt0 || !opt1 || !opt2 || !opt3) {
+        alert('Vui lòng điền đầy đủ câu hỏi và 4 lựa chọn!');
+        return;
+      }
+
+      const qObj = { title, options: [opt0, opt1, opt2, opt3], correct };
+      if (editingIndex >= 0) questions[editingIndex] = qObj;
+      else questions.push(qObj);
+
+      renderQuestions();
+      closeQuestionModal();
+    }
+
+    function editQuestion(idx) {
+      editingIndex = idx;
+      const q = questions[idx];
+      document.getElementById('modal-title').innerText = 'Sửa Câu Hỏi';
+      document.getElementById('q-title').value = q.title;
+      document.getElementById('opt-0').value = q.options[0];
+      document.getElementById('opt-1').value = q.options[1];
+      document.getElementById('opt-2').value = q.options[2];
+      document.getElementById('opt-3').value = q.options[3];
+      document.getElementById('q-correct').value = q.correct;
+      document.getElementById('q-modal').classList.remove('hidden');
+    }
+
+    function deleteQuestion(idx) {
+      if (confirm('Bạn có chắc muốn xóa câu hỏi này?')) {
+        questions.splice(idx, 1);
+        renderQuestions();
+      }
+    }
+
+    function showQRModal() {
+      const qrContainer = document.getElementById('qrcode');
+      qrContainer.innerHTML = '';
+      const currentUrl = window.location.href.replace('admin.html', 'index.html');
+      const joinUrl = `${currentUrl}?room=${roomID}`;
+
+      new QRCode(qrContainer, { text: joinUrl, width: 160, height: 160 });
+      document.getElementById('qr-link-text').innerText = joinUrl;
+      document.getElementById('qr-modal').classList.remove('hidden');
+    }
+    function closeQRModal() {
+      document.getElementById('qr-modal').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
